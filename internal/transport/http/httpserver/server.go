@@ -3,18 +3,38 @@ package httpserver
 import (
 	"encoding/json"
 	"net/http"
+
+	coreRuntime "github.com/vibe-c2/vibe-c2-golang-channel-core/pkg/runtime"
+	coreSync "github.com/vibe-c2/vibe-c2-golang-channel-core/pkg/syncclient"
 )
 
 type SyncRequest struct {
+	ProfileID     string `json:"profile_id,omitempty"`
 	ID            string `json:"id"`
 	EncryptedData string `json:"encrypted_data"`
 }
 
 type SyncResponse struct {
+	ID            string `json:"id"`
 	EncryptedData string `json:"encrypted_data"`
 }
 
-func New(addr string) *http.Server {
+type envelope struct {
+	data map[string]string
+}
+
+func (e *envelope) SourceKey() string { return "http" }
+func (e *envelope) GetField(location, key string) (string, bool) {
+	v, ok := e.data[location+"."+key]
+	return v, ok
+}
+func (e *envelope) SetField(location, key, value string) {
+	e.data[location+"."+key] = value
+}
+
+func New(addr, channelID, c2SyncBaseURL string) *http.Server {
+	runtime := coreRuntime.New(coreSync.NewHTTPClient(c2SyncBaseURL, nil))
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -37,9 +57,21 @@ func New(addr string) *http.Server {
 			return
 		}
 
-		// TODO: wire channel-core runtime + profile engine + C2 sync client.
-		out := SyncResponse{EncryptedData: in.EncryptedData}
+		env := &envelope{data: map[string]string{
+			"mapping.id":             in.ID,
+			"mapping.encrypted_data": in.EncryptedData,
+		}}
+		if in.ProfileID != "" {
+			env.SetField("mapping", "profile_id", in.ProfileID)
+		}
 
+		outCanonical, err := runtime.Handle(r.Context(), env, channelID)
+		if err != nil {
+			http.Error(w, "sync failed: "+err.Error(), http.StatusBadGateway)
+			return
+		}
+
+		out := SyncResponse{ID: outCanonical.ID, EncryptedData: outCanonical.EncryptedData}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(out)
 	})
