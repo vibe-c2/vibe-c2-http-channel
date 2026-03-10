@@ -6,13 +6,14 @@ First production channel module for Vibe C2.
 
 `vibe-c2-http-channel` implements HTTP transport for implant/session <-> C2 communication using:
 
-- `github.com/vibe-c2/vibe-c2-golang-channel-core`
+- `github.com/vibe-c2/vibe-c2-golang-channel-core` (latest)
 - `github.com/vibe-c2/vibe-c2-golang-protocol`
 
 ## Scope (v0)
 
 - receive inbound HTTP requests
-- pass canonical `id` + `encrypted_data` into `vibe-c2-golang-channel-core`
+- resolve profile via channel-core matcher (`hint` -> `fallback`)
+- pass canonical values into channel-core profile-aware runtime
 - call C2 sync endpoint through channel-core runtime
 - return outbound encrypted payload
 

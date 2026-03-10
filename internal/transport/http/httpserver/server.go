@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 
+	coreErrors "github.com/vibe-c2/vibe-c2-golang-channel-core/pkg/errors"
+	coreMatcher "github.com/vibe-c2/vibe-c2-golang-channel-core/pkg/matcher"
+	coreProfile "github.com/vibe-c2/vibe-c2-golang-channel-core/pkg/profile"
 	coreRuntime "github.com/vibe-c2/vibe-c2-golang-channel-core/pkg/runtime"
 	coreSync "github.com/vibe-c2/vibe-c2-golang-channel-core/pkg/syncclient"
 )
@@ -34,6 +37,21 @@ func (e *envelope) SetField(location, key, value string) {
 
 func New(addr, channelID, c2SyncBaseURL string) *http.Server {
 	runtime := coreRuntime.New(coreSync.NewHTTPClient(c2SyncBaseURL, nil))
+	matcher := coreMatcher.New()
+	profiles := []coreProfile.Profile{
+		{
+			ProfileID:       "default-http",
+			ChannelType:     "http",
+			Enabled:         true,
+			DefaultFallback: true,
+			Priority:        100,
+			Mapping: coreProfile.Mapping{
+				ProfileID:     "profile_id",
+				ID:            "id",
+				EncryptedData: "encrypted_data",
+			},
+		},
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -65,7 +83,17 @@ func New(addr, channelID, c2SyncBaseURL string) *http.Server {
 			env.SetField("mapping", "profile_id", in.ProfileID)
 		}
 
-		outCanonical, err := runtime.Handle(r.Context(), env, channelID)
+		resolution, err := matcher.Resolve(r.Context(), in.ProfileID, profiles)
+		if err != nil {
+			if code := coreErrors.Code(err); code == coreErrors.CodeProfileAmbiguous || code == coreErrors.CodeProfileNotFound {
+				http.Error(w, "profile resolution failed: "+err.Error(), http.StatusBadRequest)
+				return
+			}
+			http.Error(w, "profile resolution failed: "+err.Error(), http.StatusBadGateway)
+			return
+		}
+
+		outCanonical, err := runtime.HandleWithProfile(r.Context(), env, channelID, resolution.Profile)
 		if err != nil {
 			http.Error(w, "sync failed: "+err.Error(), http.StatusBadGateway)
 			return
