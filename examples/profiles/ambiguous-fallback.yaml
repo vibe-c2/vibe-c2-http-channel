@@ -1,0 +1,8 @@
+profile_id: fallback
+channel_type: http
+enabled: true
+default_fallback: true
+priority: 100
+mapping:
+  id: body:id
+  encrypted_data: body:encrypted_data

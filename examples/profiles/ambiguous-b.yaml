@@ -1,0 +1,9 @@
+profile_id: b
+channel_type: http
+enabled: true
+default_fallback: false
+priority: 150
+mapping:
+  profile_id: dup
+  id: body:id2
+  encrypted_data: body:encrypted_data2

@@ -13,18 +13,22 @@ import (
 	coreProfile "github.com/vibe-c2/vibe-c2-golang-channel-core/pkg/profile"
 )
 
-func loadExampleProfiles(t *testing.T, file string) []coreProfile.Profile {
+func loadExampleProfiles(t *testing.T, files ...string) []coreProfile.Profile {
 	t.Helper()
-	path := filepath.Join("..", "..", "..", "..", "examples", "profiles", file)
-	b, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read profile example %s: %v", file, err)
+	all := make([]coreProfile.Profile, 0, len(files))
+	for _, file := range files {
+		path := filepath.Join("..", "..", "..", "..", "examples", "profiles", file)
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read profile example %s: %v", file, err)
+		}
+		profiles, err := coreProfile.ParseYAMLProfiles(b)
+		if err != nil {
+			t.Fatalf("parse profile example %s: %v", file, err)
+		}
+		all = append(all, profiles...)
 	}
-	profiles, err := coreProfile.ParseYAMLProfiles(b)
-	if err != nil {
-		t.Fatalf("parse profile example %s: %v", file, err)
-	}
-	return profiles
+	return all
 }
 
 func TestObfuscationProfiles_Body(t *testing.T) {
@@ -160,7 +164,7 @@ func TestObfuscationProfiles_HintRouted(t *testing.T) {
 	c2 := newTestC2Core(t)
 	defer c2.Close()
 
-	profiles := loadExampleProfiles(t, "hint-routed.yaml")
+	profiles := loadExampleProfiles(t, "hint-routed-p1.yaml", "hint-routed-fallback.yaml")
 	srv := New(":0", "http-main", c2.URL(), profiles)
 	ts := httptest.NewServer(srv.Handler)
 	defer ts.Close()
@@ -182,12 +186,11 @@ func TestObfuscationProfiles_HintRouted(t *testing.T) {
 }
 
 func TestObfuscationProfiles_AmbiguousProfileSetRejected(t *testing.T) {
-	path := filepath.Join("..", "..", "..", "..", "examples", "profiles", "ambiguous-hint.yaml")
-	b, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := coreProfile.ParseYAMLProfiles(b); err == nil {
+	a := loadExampleProfiles(t, "ambiguous-a.yaml")
+	b := loadExampleProfiles(t, "ambiguous-b.yaml")
+	f := loadExampleProfiles(t, "ambiguous-fallback.yaml")
+	combined := append(append(a, b...), f...)
+	if err := coreProfile.ValidateSet(combined); err == nil {
 		t.Fatal("expected ambiguous profile set to be rejected")
 	}
 }
