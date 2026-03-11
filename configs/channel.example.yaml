@@ -1,4 +1,4 @@
 channel_id: http-main
 listen: ":8080"
 c2_sync_base_url: "http://localhost:9000"
-active_profile_id: default-http
+profiles_file: "configs/profiles.example.yaml"

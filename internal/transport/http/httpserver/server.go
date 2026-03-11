@@ -35,23 +35,9 @@ func (e *envelope) SetField(location, key, value string) {
 	e.data[location+"."+key] = value
 }
 
-func New(addr, channelID, c2SyncBaseURL string) *http.Server {
+func New(addr, channelID, c2SyncBaseURL string, profiles []coreProfile.Profile) *http.Server {
 	runtime := coreRuntime.New(coreSync.NewHTTPClient(c2SyncBaseURL, nil))
 	matcher := coreMatcher.New()
-	profiles := []coreProfile.Profile{
-		{
-			ProfileID:       "default-http",
-			ChannelType:     "http",
-			Enabled:         true,
-			DefaultFallback: true,
-			Priority:        100,
-			Mapping: coreProfile.Mapping{
-				ProfileID:     "profile_id",
-				ID:            "id",
-				EncryptedData: "encrypted_data",
-			},
-		},
-	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {

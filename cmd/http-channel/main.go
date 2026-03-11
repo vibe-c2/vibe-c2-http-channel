@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/vibe-c2/vibe-c2-http-channel/internal/config"
 	httpserver "github.com/vibe-c2/vibe-c2-http-channel/internal/transport/http/httpserver"
 )
 
@@ -15,12 +16,18 @@ func getEnv(key, fallback string) string {
 }
 
 func main() {
-	addr := getEnv("LISTEN_ADDR", ":8080")
-	channelID := getEnv("CHANNEL_ID", "http-main")
-	c2SyncBaseURL := getEnv("C2_SYNC_BASE_URL", "http://localhost:9000")
+	configFile := getEnv("CONFIG_FILE", "configs/channel.example.yaml")
+	cfg, err := config.Load(configFile)
+	if err != nil {
+		log.Fatalf("config load failed: %v", err)
+	}
+	profiles, err := config.LoadProfiles(cfg.ProfilesFile)
+	if err != nil {
+		log.Fatalf("profiles load failed: %v", err)
+	}
 
-	srv := httpserver.New(addr, channelID, c2SyncBaseURL)
-	log.Printf("vibe-c2-http-channel listening on %s (channel_id=%s, c2=%s)", srv.Addr, channelID, c2SyncBaseURL)
+	srv := httpserver.New(cfg.Listen, cfg.ChannelID, cfg.C2SyncBaseURL, profiles)
+	log.Printf("vibe-c2-http-channel listening on %s (channel_id=%s, c2=%s, profiles=%d)", srv.Addr, cfg.ChannelID, cfg.C2SyncBaseURL, len(profiles))
 	if err := srv.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}

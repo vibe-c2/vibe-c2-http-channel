@@ -17,11 +17,16 @@ First production channel module for Vibe C2.
 - call C2 sync endpoint through channel-core runtime
 - return outbound encrypted payload
 
-## Environment
+## Configuration
 
-- `LISTEN_ADDR` (default `:8080`)
-- `CHANNEL_ID` (default `http-main`)
-- `C2_SYNC_BASE_URL` (default `http://localhost:9000`)
+Main config file (`CONFIG_FILE`, default `configs/channel.example.yaml`):
+
+- `channel_id`
+- `listen`
+- `c2_sync_base_url`
+- `profiles_file`
+
+Profiles are loaded from YAML file (default `configs/profiles.example.yaml`) and resolved via channel-core matcher (`hint` first, fallback last).
 
 ## Run
 
