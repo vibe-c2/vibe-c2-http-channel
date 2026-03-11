@@ -1,8 +1,14 @@
 profile_id: cookie-session-v1
 channel_type: http
 enabled: true
-default_fallback: true
 priority: 100
 mapping:
-  id: cookie:cid
-  encrypted_data: cookie:cpayload
+  id:
+    source: id
+    target: { location: cookie, key: cid }
+  encrypted_data_in:
+    source: encrypted_data
+    target: { location: cookie, key: cpayload }
+  encrypted_data_out:
+    source: encrypted_data
+    target: { location: cookie, key: cpayload }

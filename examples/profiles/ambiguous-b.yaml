@@ -1,9 +1,17 @@
 profile_id: b
 channel_type: http
 enabled: true
-default_fallback: false
 priority: 150
 mapping:
-  profile_id: dup
-  id: body:id2
-  encrypted_data: body:encrypted_data2
+  profile_id:
+    source: profile_id
+    target: { location: body, key: dup }
+  id:
+    source: id
+    target: { location: body, key: id2 }
+  encrypted_data_in:
+    source: encrypted_data
+    target: { location: body, key: encrypted_data2 }
+  encrypted_data_out:
+    source: encrypted_data
+    target: { location: body, key: encrypted_data2 }

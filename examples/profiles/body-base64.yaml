@@ -1,8 +1,20 @@
 profile_id: body-base64-v1
 channel_type: http
 enabled: true
-default_fallback: true
 priority: 100
 mapping:
-  id: body:id|base64
-  encrypted_data: body:encrypted_data|base64
+  id:
+    source: id
+    target: { location: body, key: id }
+    transform:
+      - type: base64
+  encrypted_data_in:
+    source: encrypted_data
+    target: { location: body, key: encrypted_data }
+    transform:
+      - type: base64
+  encrypted_data_out:
+    source: encrypted_data
+    target: { location: body, key: encrypted_data }
+    transform:
+      - type: base64

@@ -30,24 +30,7 @@ func (e *envelope) GetField(location, key string) (string, bool) {
 }
 func (e *envelope) SetField(location, key, value string) { e.data[location+"."+key] = value }
 
-type parsedMapRef struct {
-	Ref   string
-	Steps []coreTransform.Spec
-}
-
-func parseMapRef(raw string) parsedMapRef {
-	parts := strings.Split(raw, "|")
-	out := parsedMapRef{Ref: strings.TrimSpace(parts[0])}
-	for _, p := range parts[1:] {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			out.Steps = append(out.Steps, coreTransform.Spec{Type: p})
-		}
-	}
-	return out
-}
-
-func detectHint(r *http.Request, body map[string]any) string {
+func requestInput(r *http.Request, body map[string]any) coreResolver.Input {
 	in := coreResolver.Input{Body: body, Headers: map[string]string{}, Query: map[string]string{}, Cookies: map[string]string{}}
 	for k, v := range r.Header {
 		if len(v) > 0 {
@@ -63,12 +46,39 @@ func detectHint(r *http.Request, body map[string]any) string {
 	for _, c := range r.Cookies() {
 		in.Cookies[c.Name] = c.Value
 	}
+	return in
+}
+
+func detectHint(input coreResolver.Input, profiles []coreProfile.Profile) string {
 	for _, ref := range []string{"query:profile_id", "header:X-Profile-ID", "cookie:profile_id", "body:profile_id"} {
-		if v, ok, _ := coreResolver.Resolve(ref, in); ok {
+		if v, ok, _ := coreResolver.Resolve(ref, input); ok {
+			return v
+		}
+	}
+	for _, p := range profiles {
+		if p.Mapping.ProfileID == nil {
+			continue
+		}
+		if v, ok, _ := coreResolver.Resolve(p.Mapping.ProfileID.Ref(), input); ok {
 			return v
 		}
 	}
 	return ""
+}
+
+func resolveMapped(input coreResolver.Input, mf coreProfile.MapField) (string, error) {
+	raw, ok, err := coreResolver.Resolve(mf.Ref(), input)
+	if err != nil || !ok {
+		if err != nil {
+			return "", err
+		}
+		return "", coreErrors.New(coreErrors.CodeInvalidInput, "missing mapped field: "+mf.Ref())
+	}
+	v, err := coreTransform.ApplyDecode(raw, mf.Transform)
+	if err != nil {
+		return "", err
+	}
+	return v, nil
 }
 
 func New(addr, channelID, c2SyncBaseURL string, profiles []coreProfile.Profile) *http.Server {
@@ -87,95 +97,74 @@ func New(addr, channelID, c2SyncBaseURL string, profiles []coreProfile.Profile) 
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-
 		var body map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			http.Error(w, "invalid json", http.StatusBadRequest)
 			return
 		}
+		input := requestInput(r, body)
 
-		hint := detectHint(r, body)
+		hint := detectHint(input, profiles)
 		if hint == "" {
 			if p, ok := affinity.Get(r.RemoteAddr); ok {
 				hint = p
 			}
 		}
-		resolution, err := matcher.Resolve(r.Context(), hint, profiles)
-		if err != nil {
-			if code := coreErrors.Code(err); code == coreErrors.CodeProfileAmbiguous || code == coreErrors.CodeProfileNotFound {
+
+		candidates := matcher.EnabledOrdered(profiles)
+		if hint != "" {
+			if res, err := matcher.Resolve(r.Context(), hint, profiles); err == nil {
+				candidates = []coreProfile.Profile{res.Profile}
+			} else if coreErrors.Code(err) == coreErrors.CodeProfileAmbiguous {
 				http.Error(w, "profile resolution failed: "+err.Error(), http.StatusBadRequest)
 				return
 			}
-			http.Error(w, "profile resolution failed: "+err.Error(), http.StatusBadGateway)
-			return
 		}
 
-		input := coreResolver.Input{Body: body, Headers: map[string]string{}, Query: map[string]string{}, Cookies: map[string]string{}}
-		for k, v := range r.Header {
-			if len(v) > 0 {
-				input.Headers[k] = v[0]
-				input.Headers[strings.ToLower(k)] = v[0]
+		var lastErr error
+		for _, p := range candidates {
+			id, err := resolveMapped(input, p.Mapping.ID)
+			if err != nil {
+				lastErr = err
+				continue
 			}
-		}
-		for k, v := range r.URL.Query() {
-			if len(v) > 0 {
-				input.Query[k] = v[0]
+			encIn, err := resolveMapped(input, p.Mapping.EncryptedDataIn)
+			if err != nil {
+				lastErr = err
+				continue
 			}
-		}
-		for _, c := range r.Cookies() {
-			input.Cookies[c.Name] = c.Value
-		}
 
-		idMap := parseMapRef(resolution.Profile.Mapping.ID)
-		encMap := parseMapRef(resolution.Profile.Mapping.EncryptedData)
-		idRaw, ok, err := coreResolver.Resolve(idMap.Ref, input)
-		if err != nil || !ok {
-			http.Error(w, "id not found by profile mapping", http.StatusBadRequest)
-			return
-		}
-		encRaw, ok, err := coreResolver.Resolve(encMap.Ref, input)
-		if err != nil || !ok {
-			http.Error(w, "encrypted_data not found by profile mapping", http.StatusBadRequest)
-			return
-		}
-		id, err := coreTransform.ApplyDecode(idRaw, idMap.Steps)
-		if err != nil {
-			http.Error(w, "id decode failed", http.StatusBadRequest)
-			return
-		}
-		enc, err := coreTransform.ApplyDecode(encRaw, encMap.Steps)
-		if err != nil {
-			http.Error(w, "encrypted_data decode failed", http.StatusBadRequest)
-			return
-		}
+			env := &envelope{data: map[string]string{}}
+			env.SetField("mapping", p.Mapping.ID.Target.Key, id)
+			env.SetField("mapping", p.Mapping.EncryptedDataIn.Target.Key, encIn)
+			if hint != "" && p.Mapping.ProfileID != nil {
+				env.SetField("mapping", p.Mapping.ProfileID.Target.Key, hint)
+			}
 
-		p := resolution.Profile
-		p.Mapping.ID = idMap.Ref
-		p.Mapping.EncryptedData = encMap.Ref
-		if p.Mapping.ProfileID != "" {
-			p.Mapping.ProfileID = parseMapRef(p.Mapping.ProfileID).Ref
-		}
+			outCanonical, err := runtime.HandleWithProfile(r.Context(), env, channelID, p)
+			if err != nil {
+				http.Error(w, "sync failed: "+err.Error(), http.StatusBadGateway)
+				return
+			}
 
-		env := &envelope{data: map[string]string{}}
-		env.SetField("mapping", p.Mapping.ID, id)
-		env.SetField("mapping", p.Mapping.EncryptedData, enc)
-		if hint != "" && p.Mapping.ProfileID != "" {
-			env.SetField("mapping", p.Mapping.ProfileID, hint)
-		}
-
-		outCanonical, err := runtime.HandleWithProfile(r.Context(), env, channelID, p)
-		if err != nil {
-			http.Error(w, "sync failed: "+err.Error(), http.StatusBadGateway)
+			outID, err := coreTransform.ApplyEncode(outCanonical.ID, p.Mapping.ID.Transform)
+			if err != nil {
+				http.Error(w, "id encode failed", http.StatusBadRequest)
+				return
+			}
+			outEnc, err := coreTransform.ApplyEncode(outCanonical.EncryptedData, p.Mapping.EncryptedDataOut.Transform)
+			if err != nil {
+				http.Error(w, "encrypted_data encode failed", http.StatusBadRequest)
+				return
+			}
+			affinity.Set(r.RemoteAddr, p.ProfileID)
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(SyncResponse{ID: outID, EncryptedData: outEnc})
 			return
 		}
 
-		outID, _ := coreTransform.ApplyEncode(outCanonical.ID, idMap.Steps)
-		outEnc, _ := coreTransform.ApplyEncode(outCanonical.EncryptedData, encMap.Steps)
-		affinity.Set(r.RemoteAddr, p.ProfileID)
-
-		out := SyncResponse{ID: outID, EncryptedData: outEnc}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(out)
+		http.Error(w, "profile resolution failed: unmatched payload", http.StatusBadRequest)
+		_ = lastErr
 	})
 
 	return &http.Server{Addr: addr, Handler: mux}

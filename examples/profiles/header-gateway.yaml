@@ -1,8 +1,14 @@
 profile_id: gateway-header-v1
 channel_type: http
 enabled: true
-default_fallback: true
 priority: 100
 mapping:
-  id: header:X-Id
-  encrypted_data: header:X-Payload
+  id:
+    source: id
+    target: { location: header, key: X-Id }
+  encrypted_data_in:
+    source: encrypted_data
+    target: { location: header, key: X-Payload }
+  encrypted_data_out:
+    source: encrypted_data
+    target: { location: header, key: X-Payload }

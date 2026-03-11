@@ -1,8 +1,17 @@
-profile_id: default-http-fallback
+profile_id: p2
 channel_type: http
 enabled: true
-default_fallback: true
 priority: 100
 mapping:
-  id: body:id
-  encrypted_data: body:encrypted_data
+  profile_id:
+    source: profile_id
+    target: { location: body, key: profile_id }
+  id:
+    source: id
+    target: { location: body, key: id }
+  encrypted_data_in:
+    source: encrypted_data
+    target: { location: body, key: encrypted_data }
+  encrypted_data_out:
+    source: encrypted_data
+    target: { location: body, key: encrypted_data }
