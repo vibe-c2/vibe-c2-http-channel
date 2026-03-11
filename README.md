@@ -52,11 +52,12 @@ Run:
 go test ./...
 ```
 
-Covered obfuscation profile scenarios:
+Covered obfuscation profile scenarios (loaded from `examples/profiles/*.yaml`):
 
 - `body` mapping
 - `header` mapping
 - `query` mapping
 - `cookie` mapping
+- hint-routed profile selection
 - `base64` transform pipeline (`decode inbound` + `encode outbound`)
 - ambiguous profile hint error handling

@@ -6,18 +6,32 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	coreProfile "github.com/vibe-c2/vibe-c2-golang-channel-core/pkg/profile"
 )
 
+func loadExampleProfiles(t *testing.T, file string) []coreProfile.Profile {
+	t.Helper()
+	path := filepath.Join("..", "..", "..", "..", "examples", "profiles", file)
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read profile example %s: %v", file, err)
+	}
+	profiles, err := coreProfile.ParseYAMLProfiles(b)
+	if err != nil {
+		t.Fatalf("parse profile example %s: %v", file, err)
+	}
+	return profiles
+}
+
 func TestObfuscationProfiles_Body(t *testing.T) {
 	c2 := newTestC2Core(t)
 	defer c2.Close()
 
-	profiles := []coreProfile.Profile{
-		{ProfileID: "fallback", ChannelType: "http", Enabled: true, DefaultFallback: true, Priority: 1, Mapping: coreProfile.Mapping{ID: "body:id", EncryptedData: "body:encrypted_data"}},
-	}
+	profiles := loadExampleProfiles(t, "body-default.yaml")
 
 	srv := New(":0", "http-main", c2.URL(), profiles)
 	ts := httptest.NewServer(srv.Handler)
@@ -41,7 +55,7 @@ func TestObfuscationProfiles_Body(t *testing.T) {
 func TestObfuscationProfiles_Header(t *testing.T) {
 	c2 := newTestC2Core(t)
 	defer c2.Close()
-	profiles := []coreProfile.Profile{{ProfileID: "fallback", ChannelType: "http", Enabled: true, DefaultFallback: true, Priority: 1, Mapping: coreProfile.Mapping{ID: "header:X-Id", EncryptedData: "header:X-Payload"}}}
+	profiles := loadExampleProfiles(t, "header-gateway.yaml")
 
 	srv := New(":0", "http-main", c2.URL(), profiles)
 	ts := httptest.NewServer(srv.Handler)
@@ -64,7 +78,7 @@ func TestObfuscationProfiles_Header(t *testing.T) {
 func TestObfuscationProfiles_Query(t *testing.T) {
 	c2 := newTestC2Core(t)
 	defer c2.Close()
-	profiles := []coreProfile.Profile{{ProfileID: "fallback", ChannelType: "http", Enabled: true, DefaultFallback: true, Priority: 1, Mapping: coreProfile.Mapping{ID: "query:i", EncryptedData: "query:d"}}}
+	profiles := loadExampleProfiles(t, "query-beacon.yaml")
 
 	srv := New(":0", "http-main", c2.URL(), profiles)
 	ts := httptest.NewServer(srv.Handler)
@@ -85,7 +99,7 @@ func TestObfuscationProfiles_Query(t *testing.T) {
 func TestObfuscationProfiles_Cookie(t *testing.T) {
 	c2 := newTestC2Core(t)
 	defer c2.Close()
-	profiles := []coreProfile.Profile{{ProfileID: "fallback", ChannelType: "http", Enabled: true, DefaultFallback: true, Priority: 1, Mapping: coreProfile.Mapping{ID: "cookie:cid", EncryptedData: "cookie:cpayload"}}}
+	profiles := loadExampleProfiles(t, "cookie-session.yaml")
 
 	srv := New(":0", "http-main", c2.URL(), profiles)
 	ts := httptest.NewServer(srv.Handler)
@@ -108,7 +122,7 @@ func TestObfuscationProfiles_Cookie(t *testing.T) {
 func TestObfuscationProfiles_TransformBase64(t *testing.T) {
 	c2 := newTestC2Core(t)
 	defer c2.Close()
-	profiles := []coreProfile.Profile{{ProfileID: "fallback", ChannelType: "http", Enabled: true, DefaultFallback: true, Priority: 1, Mapping: coreProfile.Mapping{ID: "body:id|base64", EncryptedData: "body:encrypted_data|base64"}}}
+	profiles := loadExampleProfiles(t, "body-base64.yaml")
 
 	srv := New(":0", "http-main", c2.URL(), profiles)
 	ts := httptest.NewServer(srv.Handler)
@@ -142,28 +156,38 @@ func TestObfuscationProfiles_TransformBase64(t *testing.T) {
 	}
 }
 
-func TestObfuscationProfiles_AmbiguousHint(t *testing.T) {
+func TestObfuscationProfiles_HintRouted(t *testing.T) {
 	c2 := newTestC2Core(t)
 	defer c2.Close()
 
-	profiles := []coreProfile.Profile{
-		{ProfileID: "a", ChannelType: "http", Enabled: true, Mapping: coreProfile.Mapping{ProfileID: "dup", ID: "body:id", EncryptedData: "body:encrypted_data"}},
-		{ProfileID: "b", ChannelType: "http", Enabled: true, Mapping: coreProfile.Mapping{ProfileID: "dup", ID: "body:id", EncryptedData: "body:encrypted_data"}},
-		{ProfileID: "fallback", ChannelType: "http", Enabled: true, DefaultFallback: true, Priority: 1, Mapping: coreProfile.Mapping{ID: "body:id", EncryptedData: "body:encrypted_data"}},
-	}
-
+	profiles := loadExampleProfiles(t, "hint-routed.yaml")
 	srv := New(":0", "http-main", c2.URL(), profiles)
 	ts := httptest.NewServer(srv.Handler)
 	defer ts.Close()
 
-	payload := []byte(`{"profile_id":"dup","id":"abc","encrypted_data":"xyz"}`)
+	payload := []byte(`{"profile_id":"p1","id_field":"abc","blob_field":"xyz"}`)
 	resp, err := http.Post(ts.URL+"/sync", "application/json", bytes.NewReader(payload))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
+	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("unexpected status: %d", resp.StatusCode)
+	}
+	in := c2.LastInbound()
+	if in.ID != "abc" || in.EncryptedData != "xyz" {
+		t.Fatalf("unexpected routed inbound: %+v", in)
+	}
+}
+
+func TestObfuscationProfiles_AmbiguousProfileSetRejected(t *testing.T) {
+	path := filepath.Join("..", "..", "..", "..", "examples", "profiles", "ambiguous-hint.yaml")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := coreProfile.ParseYAMLProfiles(b); err == nil {
+		t.Fatal("expected ambiguous profile set to be rejected")
 	}
 }

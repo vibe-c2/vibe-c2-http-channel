@@ -1,0 +1,18 @@
+profiles:
+  - profile_id: p1
+    channel_type: http
+    enabled: true
+    default_fallback: false
+    priority: 200
+    mapping:
+      profile_id: body:profile_id
+      id: body:id_field
+      encrypted_data: body:blob_field
+  - profile_id: default-http-fallback
+    channel_type: http
+    enabled: true
+    default_fallback: true
+    priority: 100
+    mapping:
+      id: body:id
+      encrypted_data: body:encrypted_data
