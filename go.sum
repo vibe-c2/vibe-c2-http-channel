@@ -1,5 +1,5 @@
-github.com/vibe-c2/vibe-c2-golang-channel-core v0.3.0 h1:qqpM3xIdrEQVNKEKZfcgC5h/8rV27x/CjoaaRmRLMT8=
-github.com/vibe-c2/vibe-c2-golang-channel-core v0.3.0/go.mod h1:iAQJbzJreB5jklH0ORqj+OahKQiZ+wlechP/v5/eJn4=
+github.com/vibe-c2/vibe-c2-golang-channel-core v0.4.0 h1:dbf/lfBlzUNhQAyaYkZl/GG33dvxWmdOb8D08/w7Dsk=
+github.com/vibe-c2/vibe-c2-golang-channel-core v0.4.0/go.mod h1:iAQJbzJreB5jklH0ORqj+OahKQiZ+wlechP/v5/eJn4=
 github.com/vibe-c2/vibe-c2-golang-protocol v0.1.0 h1:HkkgejOBwYJz6hmb+vq/lEsm5tTpWC2F5/1jANgTjMk=
 github.com/vibe-c2/vibe-c2-golang-protocol v0.1.0/go.mod h1:KEgzt5kyYAK/vckjBmovjvWqBRsUrqod4kg36n8Zo4Y=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405 h1:yhCVgyC4o1eVCa2tZl7eS0r+SDo693bJlVdllGtEeKM=
