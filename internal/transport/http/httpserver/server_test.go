@@ -2,134 +2,148 @@ package httpserver
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	coreProfile "github.com/vibe-c2/vibe-c2-golang-channel-core/pkg/profile"
-	protocol "github.com/vibe-c2/vibe-c2-golang-protocol/protocol"
 )
 
-func newFakeC2(t *testing.T) *httptest.Server {
-	t.Helper()
-	mux := http.NewServeMux()
-	mux.HandleFunc("/api/channel/sync", func(w http.ResponseWriter, r *http.Request) {
-		var in protocol.InboundAgentMessage
-		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		out := protocol.OutboundAgentMessage{
-			MessageID:     "out-1",
-			Type:          protocol.TypeOutboundAgentMessage,
-			Version:       protocol.VersionV1,
-			Timestamp:     "2026-03-11T00:00:00Z",
-			Source:        protocol.SourceInfo{Module: "core", ModuleInstance: "main", Transport: "http", Tenant: "default"},
-			ID:            in.ID + "-ack",
-			EncryptedData: "resp:" + in.EncryptedData,
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(out)
-	})
-	return httptest.NewServer(mux)
-}
-
-func TestSyncWithHintProfile(t *testing.T) {
-	c2 := newFakeC2(t)
+func TestObfuscationProfiles_Body(t *testing.T) {
+	c2 := newTestC2Core(t)
 	defer c2.Close()
 
 	profiles := []coreProfile.Profile{
-		{ProfileID: "p1", ChannelType: "http", Enabled: true, Mapping: coreProfile.Mapping{ProfileID: "body:profile_id", ID: "body:id_field", EncryptedData: "body:blob_field"}},
 		{ProfileID: "fallback", ChannelType: "http", Enabled: true, DefaultFallback: true, Priority: 1, Mapping: coreProfile.Mapping{ID: "body:id", EncryptedData: "body:encrypted_data"}},
 	}
 
-	srv := New(":0", "http-main", c2.URL, profiles)
+	srv := New(":0", "http-main", c2.URL(), profiles)
 	ts := httptest.NewServer(srv.Handler)
 	defer ts.Close()
 
-	payload := []byte(`{"profile_id":"p1","id_field":"abc","blob_field":"xyz"}`)
-	resp, err := http.Post(ts.URL+"/sync", "application/json", bytes.NewReader(payload))
+	resp, err := http.Post(ts.URL+"/sync", "application/json", bytes.NewReader([]byte(`{"id":"n1","encrypted_data":"blob"}`)))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("unexpected status: %d", resp.StatusCode)
 	}
-	var out SyncResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatal(err)
-	}
-	if out.ID != "abc-ack" || out.EncryptedData != "resp:xyz" {
-		t.Fatalf("unexpected response: %+v", out)
+
+	in := c2.LastInbound()
+	if in.ID != "n1" || in.EncryptedData != "blob" {
+		t.Fatalf("unexpected inbound to c2: %+v", in)
 	}
 }
 
-func TestSyncFallbackProfile(t *testing.T) {
-	c2 := newFakeC2(t)
+func TestObfuscationProfiles_Header(t *testing.T) {
+	c2 := newTestC2Core(t)
 	defer c2.Close()
+	profiles := []coreProfile.Profile{{ProfileID: "fallback", ChannelType: "http", Enabled: true, DefaultFallback: true, Priority: 1, Mapping: coreProfile.Mapping{ID: "header:X-Id", EncryptedData: "header:X-Payload"}}}
 
-	profiles := []coreProfile.Profile{
-		{ProfileID: "fallback", ChannelType: "http", Enabled: true, DefaultFallback: true, Priority: 5, Mapping: coreProfile.Mapping{ID: "body:id", EncryptedData: "body:encrypted_data"}},
-	}
-
-	srv := New(":0", "http-main", c2.URL, profiles)
+	srv := New(":0", "http-main", c2.URL(), profiles)
 	ts := httptest.NewServer(srv.Handler)
 	defer ts.Close()
 
-	payload := []byte(`{"id":"n1","encrypted_data":"blob"}`)
-	resp, err := http.Post(ts.URL+"/sync", "application/json", bytes.NewReader(payload))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("unexpected status: %d", resp.StatusCode)
-	}
-}
-
-func TestSyncQueryHeaderMapping(t *testing.T) {
-	c2 := newFakeC2(t)
-	defer c2.Close()
-
-	profiles := []coreProfile.Profile{
-		{ProfileID: "qh", ChannelType: "http", Enabled: true, DefaultFallback: true, Priority: 1, Mapping: coreProfile.Mapping{ID: "query:i", EncryptedData: "header:X-Blob"}},
-	}
-
-	srv := New(":0", "http-main", c2.URL, profiles)
-	ts := httptest.NewServer(srv.Handler)
-	defer ts.Close()
-
-	req, err := http.NewRequest(http.MethodPost, ts.URL+"/sync?i=Z9", bytes.NewReader([]byte(`{}`)))
-	if err != nil {
-		t.Fatal(err)
-	}
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/sync", bytes.NewReader([]byte(`{}`)))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Blob", "hdr")
-
+	req.Header.Set("X-ID", "h-1")
+	req.Header.Set("X-Payload", "hblob")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("unexpected status: %d", resp.StatusCode)
 	}
+}
+
+func TestObfuscationProfiles_Query(t *testing.T) {
+	c2 := newTestC2Core(t)
+	defer c2.Close()
+	profiles := []coreProfile.Profile{{ProfileID: "fallback", ChannelType: "http", Enabled: true, DefaultFallback: true, Priority: 1, Mapping: coreProfile.Mapping{ID: "query:i", EncryptedData: "query:d"}}}
+
+	srv := New(":0", "http-main", c2.URL(), profiles)
+	ts := httptest.NewServer(srv.Handler)
+	defer ts.Close()
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/sync?i=q1&d=qblob", bytes.NewReader([]byte(`{}`)))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected status: %d", resp.StatusCode)
+	}
+}
+
+func TestObfuscationProfiles_Cookie(t *testing.T) {
+	c2 := newTestC2Core(t)
+	defer c2.Close()
+	profiles := []coreProfile.Profile{{ProfileID: "fallback", ChannelType: "http", Enabled: true, DefaultFallback: true, Priority: 1, Mapping: coreProfile.Mapping{ID: "cookie:cid", EncryptedData: "cookie:cpayload"}}}
+
+	srv := New(":0", "http-main", c2.URL(), profiles)
+	ts := httptest.NewServer(srv.Handler)
+	defer ts.Close()
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/sync", bytes.NewReader([]byte(`{}`)))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "cid", Value: "c1"})
+	req.AddCookie(&http.Cookie{Name: "cpayload", Value: "cblob"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected status: %d", resp.StatusCode)
+	}
+}
+
+func TestObfuscationProfiles_TransformBase64(t *testing.T) {
+	c2 := newTestC2Core(t)
+	defer c2.Close()
+	profiles := []coreProfile.Profile{{ProfileID: "fallback", ChannelType: "http", Enabled: true, DefaultFallback: true, Priority: 1, Mapping: coreProfile.Mapping{ID: "body:id|base64", EncryptedData: "body:encrypted_data|base64"}}}
+
+	srv := New(":0", "http-main", c2.URL(), profiles)
+	ts := httptest.NewServer(srv.Handler)
+	defer ts.Close()
+
+	idIn := base64.StdEncoding.EncodeToString([]byte("agent-1"))
+	blobIn := base64.StdEncoding.EncodeToString([]byte("cipher"))
+	payload := []byte(`{"id":"` + idIn + `","encrypted_data":"` + blobIn + `"}`)
+	resp, err := http.Post(ts.URL+"/sync", "application/json", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected status: %d", resp.StatusCode)
+	}
+
+	in := c2.LastInbound()
+	if in.ID != "agent-1" || in.EncryptedData != "cipher" {
+		t.Fatalf("unexpected decoded inbound to c2: %+v", in)
+	}
+
 	var out SyncResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatal(err)
 	}
-	if out.ID != "Z9-ack" || out.EncryptedData != "resp:hdr" {
-		t.Fatalf("unexpected response: %+v", out)
+	expectedID := base64.StdEncoding.EncodeToString([]byte("agent-1-ack"))
+	expectedBlob := base64.StdEncoding.EncodeToString([]byte("resp:cipher"))
+	if out.ID != expectedID || out.EncryptedData != expectedBlob {
+		t.Fatalf("unexpected transformed outbound: %+v", out)
 	}
 }
 
-func TestSyncAmbiguousHint(t *testing.T) {
-	c2 := newFakeC2(t)
+func TestObfuscationProfiles_AmbiguousHint(t *testing.T) {
+	c2 := newTestC2Core(t)
 	defer c2.Close()
 
 	profiles := []coreProfile.Profile{
@@ -138,7 +152,7 @@ func TestSyncAmbiguousHint(t *testing.T) {
 		{ProfileID: "fallback", ChannelType: "http", Enabled: true, DefaultFallback: true, Priority: 1, Mapping: coreProfile.Mapping{ID: "body:id", EncryptedData: "body:encrypted_data"}},
 	}
 
-	srv := New(":0", "http-main", c2.URL, profiles)
+	srv := New(":0", "http-main", c2.URL(), profiles)
 	ts := httptest.NewServer(srv.Handler)
 	defer ts.Close()
 

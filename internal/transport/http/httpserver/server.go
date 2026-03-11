@@ -52,6 +52,7 @@ func detectHint(r *http.Request, body map[string]any) string {
 	for k, v := range r.Header {
 		if len(v) > 0 {
 			in.Headers[k] = v[0]
+			in.Headers[strings.ToLower(k)] = v[0]
 		}
 	}
 	for k, v := range r.URL.Query() {
@@ -113,6 +114,7 @@ func New(addr, channelID, c2SyncBaseURL string, profiles []coreProfile.Profile) 
 		for k, v := range r.Header {
 			if len(v) > 0 {
 				input.Headers[k] = v[0]
+				input.Headers[strings.ToLower(k)] = v[0]
 			}
 		}
 		for k, v := range r.URL.Query() {

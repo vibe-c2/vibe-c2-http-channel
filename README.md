@@ -41,3 +41,22 @@ Example: `id: query:agent_id`, `encrypted_data: header:X-Payload`.
 ```bash
 go run ./cmd/http-channel
 ```
+
+## Integration Tests
+
+This module includes integration tests with a built-in `test-c2-core` simulator for `/api/channel/sync`.
+
+Run:
+
+```bash
+go test ./...
+```
+
+Covered obfuscation profile scenarios:
+
+- `body` mapping
+- `header` mapping
+- `query` mapping
+- `cookie` mapping
+- `base64` transform pipeline (`decode inbound` + `encode outbound`)
+- ambiguous profile hint error handling
