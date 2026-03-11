@@ -61,13 +61,7 @@ func New(addr, channelID, c2SyncBaseURL string, profiles []coreProfile.Profile) 
 			return
 		}
 
-		env := &envelope{data: map[string]string{
-			"mapping.id":             in.ID,
-			"mapping.encrypted_data": in.EncryptedData,
-		}}
-		if in.ProfileID != "" {
-			env.SetField("mapping", "profile_id", in.ProfileID)
-		}
+		env := &envelope{data: map[string]string{}}
 
 		resolution, err := matcher.Resolve(r.Context(), in.ProfileID, profiles)
 		if err != nil {
@@ -77,6 +71,12 @@ func New(addr, channelID, c2SyncBaseURL string, profiles []coreProfile.Profile) 
 			}
 			http.Error(w, "profile resolution failed: "+err.Error(), http.StatusBadGateway)
 			return
+		}
+
+		env.SetField("mapping", resolution.Profile.Mapping.ID, in.ID)
+		env.SetField("mapping", resolution.Profile.Mapping.EncryptedData, in.EncryptedData)
+		if in.ProfileID != "" && resolution.Profile.Mapping.ProfileID != "" {
+			env.SetField("mapping", resolution.Profile.Mapping.ProfileID, in.ProfileID)
 		}
 
 		outCanonical, err := runtime.HandleWithProfile(r.Context(), env, channelID, resolution.Profile)
