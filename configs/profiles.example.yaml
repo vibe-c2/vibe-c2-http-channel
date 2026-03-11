@@ -4,6 +4,6 @@ enabled: true
 default_fallback: true
 priority: 100
 mapping:
-  profile_id: profile_id
-  id: id
-  encrypted_data: encrypted_data
+  profile_id: body:profile_id
+  id: body:id
+  encrypted_data: body:encrypted_data

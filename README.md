@@ -28,6 +28,14 @@ Main config file (`CONFIG_FILE`, default `configs/channel.example.yaml`):
 
 Profiles are loaded from YAML file (default `configs/profiles.example.yaml`) and resolved via channel-core matcher (`hint` first, fallback last).
 
+Mapping refs support location prefixes:
+- `body:<field>`
+- `header:<name>`
+- `query:<name>`
+- `cookie:<name>`
+
+Example: `id: query:agent_id`, `encrypted_data: header:X-Payload`.
+
 ## Run
 
 ```bash

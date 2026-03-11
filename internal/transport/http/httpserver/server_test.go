@@ -40,15 +40,15 @@ func TestSyncWithHintProfile(t *testing.T) {
 	defer c2.Close()
 
 	profiles := []coreProfile.Profile{
-		{ProfileID: "p1", ChannelType: "http", Enabled: true, Mapping: coreProfile.Mapping{ProfileID: "p", ID: "id_field", EncryptedData: "blob_field"}},
-		{ProfileID: "fallback", ChannelType: "http", Enabled: true, DefaultFallback: true, Priority: 1, Mapping: coreProfile.Mapping{ID: "id", EncryptedData: "encrypted_data"}},
+		{ProfileID: "p1", ChannelType: "http", Enabled: true, Mapping: coreProfile.Mapping{ProfileID: "body:profile_id", ID: "body:id_field", EncryptedData: "body:blob_field"}},
+		{ProfileID: "fallback", ChannelType: "http", Enabled: true, DefaultFallback: true, Priority: 1, Mapping: coreProfile.Mapping{ID: "body:id", EncryptedData: "body:encrypted_data"}},
 	}
 
 	srv := New(":0", "http-main", c2.URL, profiles)
 	ts := httptest.NewServer(srv.Handler)
 	defer ts.Close()
 
-	payload := []byte(`{"profile_id":"p1","id":"abc","encrypted_data":"xyz"}`)
+	payload := []byte(`{"profile_id":"p1","id_field":"abc","blob_field":"xyz"}`)
 	resp, err := http.Post(ts.URL+"/sync", "application/json", bytes.NewReader(payload))
 	if err != nil {
 		t.Fatal(err)
@@ -72,7 +72,7 @@ func TestSyncFallbackProfile(t *testing.T) {
 	defer c2.Close()
 
 	profiles := []coreProfile.Profile{
-		{ProfileID: "fallback", ChannelType: "http", Enabled: true, DefaultFallback: true, Priority: 5, Mapping: coreProfile.Mapping{ID: "id", EncryptedData: "encrypted_data"}},
+		{ProfileID: "fallback", ChannelType: "http", Enabled: true, DefaultFallback: true, Priority: 5, Mapping: coreProfile.Mapping{ID: "body:id", EncryptedData: "body:encrypted_data"}},
 	}
 
 	srv := New(":0", "http-main", c2.URL, profiles)
@@ -91,14 +91,51 @@ func TestSyncFallbackProfile(t *testing.T) {
 	}
 }
 
+func TestSyncQueryHeaderMapping(t *testing.T) {
+	c2 := newFakeC2(t)
+	defer c2.Close()
+
+	profiles := []coreProfile.Profile{
+		{ProfileID: "qh", ChannelType: "http", Enabled: true, DefaultFallback: true, Priority: 1, Mapping: coreProfile.Mapping{ID: "query:i", EncryptedData: "header:X-Blob"}},
+	}
+
+	srv := New(":0", "http-main", c2.URL, profiles)
+	ts := httptest.NewServer(srv.Handler)
+	defer ts.Close()
+
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/sync?i=Z9", bytes.NewReader([]byte(`{}`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Blob", "hdr")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected status: %d", resp.StatusCode)
+	}
+	var out SyncResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	if out.ID != "Z9-ack" || out.EncryptedData != "resp:hdr" {
+		t.Fatalf("unexpected response: %+v", out)
+	}
+}
+
 func TestSyncAmbiguousHint(t *testing.T) {
 	c2 := newFakeC2(t)
 	defer c2.Close()
 
 	profiles := []coreProfile.Profile{
-		{ProfileID: "a", ChannelType: "http", Enabled: true, Mapping: coreProfile.Mapping{ProfileID: "dup", ID: "id", EncryptedData: "encrypted_data"}},
-		{ProfileID: "b", ChannelType: "http", Enabled: true, Mapping: coreProfile.Mapping{ProfileID: "dup", ID: "id", EncryptedData: "encrypted_data"}},
-		{ProfileID: "fallback", ChannelType: "http", Enabled: true, DefaultFallback: true, Priority: 1, Mapping: coreProfile.Mapping{ID: "id", EncryptedData: "encrypted_data"}},
+		{ProfileID: "a", ChannelType: "http", Enabled: true, Mapping: coreProfile.Mapping{ProfileID: "dup", ID: "body:id", EncryptedData: "body:encrypted_data"}},
+		{ProfileID: "b", ChannelType: "http", Enabled: true, Mapping: coreProfile.Mapping{ProfileID: "dup", ID: "body:id", EncryptedData: "body:encrypted_data"}},
+		{ProfileID: "fallback", ChannelType: "http", Enabled: true, DefaultFallback: true, Priority: 1, Mapping: coreProfile.Mapping{ID: "body:id", EncryptedData: "body:encrypted_data"}},
 	}
 
 	srv := New(":0", "http-main", c2.URL, profiles)
