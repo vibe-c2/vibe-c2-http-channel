@@ -17,13 +17,16 @@ func main() {
 	if err != nil {
 		log.Fatalf("config load failed: %v", err)
 	}
-	profiles, err := config.LoadProfiles(cfg.ProfilesFile)
+	if err := config.EnsureProfilesDir(cfg.ProfilesDir); err != nil {
+		log.Fatalf("profiles dir init failed: %v", err)
+	}
+	profiles, err := config.LoadProfiles(cfg.ProfilesDir)
 	if err != nil {
 		log.Fatalf("profiles load failed: %v", err)
 	}
 
 	srv := httpserver.New(cfg.Listen, cfg.ChannelID, cfg.C2SyncBaseURL, profiles)
-	log.Printf("vibe-c2-http-channel listening on %s (channel_id=%s, c2=%s, profiles=%d)", srv.Addr, cfg.ChannelID, cfg.C2SyncBaseURL, len(profiles))
+	log.Printf("vibe-c2-http-channel listening on %s (channel_id=%s, c2=%s, profiles=%d, profiles_dir=%s)", srv.Addr, cfg.ChannelID, cfg.C2SyncBaseURL, len(profiles), cfg.ProfilesDir)
 	if err := srv.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}

@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -30,7 +31,12 @@ func (e *envelope) GetField(location, key string) (string, bool) {
 }
 func (e *envelope) SetField(location, key, value string) { e.data[location+"."+key] = value }
 
-func requestInput(r *http.Request, body map[string]any) coreResolver.Input {
+func requestInput(r *http.Request, body map[string]any, rawBody string) coreResolver.Input {
+	if body == nil {
+		body = map[string]any{}
+	}
+	body[""] = rawBody
+	body["raw"] = rawBody
 	in := coreResolver.Input{Body: body, Headers: map[string]string{}, Query: map[string]string{}, Cookies: map[string]string{}}
 	for k, v := range r.Header {
 		if len(v) > 0 {
@@ -67,6 +73,17 @@ func detectHint(input coreResolver.Input, profiles []coreProfile.Profile) string
 }
 
 func resolveMapped(input coreResolver.Input, mf coreProfile.MapField) (string, error) {
+	if strings.EqualFold(strings.TrimSpace(mf.Target.Location), "body") && strings.TrimSpace(mf.Target.Key) == "" {
+		raw, _ := input.Body[""].(string)
+		v, err := coreTransform.ApplyDecode(raw, mf.Transform)
+		if err != nil {
+			return "", err
+		}
+		if strings.TrimSpace(v) == "" {
+			return "", coreErrors.New(coreErrors.CodeInvalidInput, "missing mapped body payload")
+		}
+		return v, nil
+	}
 	raw, ok, err := coreResolver.Resolve(mf.Ref(), input)
 	if err != nil || !ok {
 		if err != nil {
@@ -97,12 +114,15 @@ func New(addr, channelID, c2SyncBaseURL string, profiles []coreProfile.Profile) 
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		var body map[string]any
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, "invalid json", http.StatusBadRequest)
+		rawBytes, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "invalid body", http.StatusBadRequest)
 			return
 		}
-		input := requestInput(r, body)
+		rawBody := string(rawBytes)
+		var body map[string]any
+		_ = json.Unmarshal(rawBytes, &body)
+		input := requestInput(r, body, rawBody)
 
 		hint := detectHint(input, profiles)
 		if hint == "" {
@@ -158,6 +178,17 @@ func New(addr, channelID, c2SyncBaseURL string, profiles []coreProfile.Profile) 
 				return
 			}
 			affinity.Set(r.RemoteAddr, p.ProfileID)
+
+			if strings.EqualFold(strings.TrimSpace(p.Mapping.ID.Target.Location), "cookie") && strings.TrimSpace(p.Mapping.ID.Target.Key) != "" {
+				http.SetCookie(w, &http.Cookie{Name: p.Mapping.ID.Target.Key, Value: outID, Path: "/"})
+			}
+
+			if strings.EqualFold(strings.TrimSpace(p.Mapping.EncryptedDataOut.Target.Location), "body") && strings.TrimSpace(p.Mapping.EncryptedDataOut.Target.Key) == "" {
+				w.Header().Set("Content-Type", "text/plain")
+				_, _ = w.Write([]byte(outEnc))
+				return
+			}
+
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(SyncResponse{ID: outID, EncryptedData: outEnc})
 			return

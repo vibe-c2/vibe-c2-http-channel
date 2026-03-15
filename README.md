@@ -24,14 +24,20 @@ Runtime config is read from environment variables:
 - `CHANNEL_ID` (default: `http-main`)
 - `LISTEN_ADDR` (default: `:8080`)
 - `C2_SYNC_BASE_URL` (default: `http://localhost:9000`)
-- `PROFILES_FILE` (default: `examples/profiles/body-default.yaml`)
+- `PROFILES_DIR` (default: `profiles`)
 
 `.env` fallback:
 
 - Pass path with `--config <path-to-env-file>`
 - `.env` is loaded as fallback only (existing environment variables win)
 
-Profiles are loaded from YAML file and resolved via channel-core matcher.
+Profiles are loaded from YAML files in `PROFILES_DIR` and resolved via channel-core matcher.
+
+Startup behavior:
+
+- create `PROFILES_DIR` if it does not exist
+- ensure `default.yaml` exists in that folder
+- if missing, copy `examples/profiles/default.yaml` into `PROFILES_DIR/default.yaml`
 
 Mapping refs support location prefixes:
 - `body:<field>`
