@@ -24,7 +24,7 @@ Runtime config is read from environment variables:
 - `CHANNEL_ID` (default: `http-main`)
 - `LISTEN_ADDR` (default: `:8080`)
 - `C2_SYNC_BASE_URL` (default: `http://localhost:9000`)
-- `PROFILES_FILE` (default: `configs/profiles.example.yaml`)
+- `PROFILES_FILE` (default: `examples/profiles/body-default.yaml`)
 
 `.env` fallback:
 

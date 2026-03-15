@@ -34,7 +34,7 @@ func LoadFromEnv(envFilePath string) (Config, error) {
 		ChannelID:     envOrDefault("CHANNEL_ID", "http-main"),
 		Listen:        envOrDefault("LISTEN_ADDR", ":8080"),
 		C2SyncBaseURL: envOrDefault("C2_SYNC_BASE_URL", "http://localhost:9000"),
-		ProfilesFile:  envOrDefault("PROFILES_FILE", "configs/profiles.example.yaml"),
+		ProfilesFile:  envOrDefault("PROFILES_FILE", "examples/profiles/body-default.yaml"),
 	}
 
 	if cfg.C2SyncBaseURL == "" {
