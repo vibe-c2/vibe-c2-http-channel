@@ -38,6 +38,10 @@ Startup behavior:
 - create `PROFILES_DIR` if it does not exist
 - ensure `default.yaml` exists in that folder
 - if missing, copy `examples/profiles/default.yaml` into `PROFILES_DIR/default.yaml`
+- watch `PROFILES_DIR` continuously:
+  - new profile files are loaded instantly
+  - updates to existing profile files are applied instantly
+  - deleted profiles are unloaded instantly
 
 Mapping refs support location prefixes:
 - `body:<field>`

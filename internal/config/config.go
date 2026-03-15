@@ -92,7 +92,7 @@ func LoadProfiles(dir string) ([]coreProfile.Profile, error) {
 		all = append(all, profiles...)
 	}
 	if len(all) == 0 {
-		return nil, fmt.Errorf("no profiles loaded")
+		return all, nil
 	}
 	if err := coreProfile.ValidateSet(all); err != nil {
 		return nil, fmt.Errorf("validate profile set: %w", err)

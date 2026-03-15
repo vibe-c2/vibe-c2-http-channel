@@ -98,7 +98,19 @@ func resolveMapped(input coreResolver.Input, mf coreProfile.MapField) (string, e
 	return v, nil
 }
 
+type profilesProvider interface{ Profiles() []coreProfile.Profile }
+
+type staticProfiles []coreProfile.Profile
+
+func (s staticProfiles) Profiles() []coreProfile.Profile {
+	return append([]coreProfile.Profile(nil), s...)
+}
+
 func New(addr, channelID, c2SyncBaseURL string, profiles []coreProfile.Profile) *http.Server {
+	return NewWithProvider(addr, channelID, c2SyncBaseURL, staticProfiles(profiles))
+}
+
+func NewWithProvider(addr, channelID, c2SyncBaseURL string, provider profilesProvider) *http.Server {
 	runtime := coreRuntime.New(coreSync.NewHTTPClient(c2SyncBaseURL, nil))
 	matcher := coreMatcher.New()
 	affinity := coreCache.NewAffinity(10 * time.Minute)
@@ -124,6 +136,7 @@ func New(addr, channelID, c2SyncBaseURL string, profiles []coreProfile.Profile) 
 		_ = json.Unmarshal(rawBytes, &body)
 		input := requestInput(r, body, rawBody)
 
+		profiles := provider.Profiles()
 		hint := detectHint(input, profiles)
 		if hint == "" {
 			if p, ok := affinity.Get(r.RemoteAddr); ok {

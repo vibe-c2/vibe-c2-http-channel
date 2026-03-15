@@ -9,4 +9,9 @@ require (
 
 require github.com/vibe-c2/vibe-c2-golang-protocol v0.1.0
 
-require github.com/joho/godotenv v1.5.1
+require (
+	github.com/fsnotify/fsnotify v1.7.0
+	github.com/joho/godotenv v1.5.1
+)
+
+require golang.org/x/sys v0.4.0 // indirect
