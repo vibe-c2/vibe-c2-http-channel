@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -182,6 +183,44 @@ func TestObfuscationProfiles_HintRouted(t *testing.T) {
 	in := c2.LastInbound()
 	if in.ID != "abc" || in.EncryptedData != "xyz" {
 		t.Fatalf("unexpected routed inbound: %+v", in)
+	}
+}
+
+func TestDefaultProfile_CombinedBase64Body(t *testing.T) {
+	c2 := newTestC2Core(t)
+	defer c2.Close()
+
+	profiles := loadExampleProfiles(t, "default.yaml")
+	srv := New(":0", "http-main", c2.URL(), profiles)
+	ts := httptest.NewServer(srv.Handler)
+	defer ts.Close()
+
+	inRaw := base64.StdEncoding.EncodeToString([]byte("agent-7+ciphertext"))
+	resp, err := http.Post(ts.URL+"/sync", "text/plain", bytes.NewReader([]byte(inRaw)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected status: %d", resp.StatusCode)
+	}
+
+	in := c2.LastInbound()
+	if in.ID != "agent-7" || in.EncryptedData != "ciphertext" {
+		t.Fatalf("unexpected inbound to c2: %+v", in)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(string(body))
+	if err != nil {
+		t.Fatalf("response not base64: %v", err)
+	}
+	if string(decoded) != "agent-7-ack+resp:ciphertext" {
+		t.Fatalf("unexpected decoded outbound body: %s", string(decoded))
 	}
 }
 

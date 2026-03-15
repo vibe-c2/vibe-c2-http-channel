@@ -73,6 +73,17 @@ func detectHint(input coreResolver.Input, profiles []coreProfile.Profile) string
 }
 
 func resolveCombined(input coreResolver.Input, cf coreProfile.CombinedField) (string, error) {
+	if strings.EqualFold(strings.TrimSpace(cf.Target.Location), "body") && strings.TrimSpace(cf.Target.Key) == "" {
+		raw, _ := input.Body[""].(string)
+		v, err := coreTransform.ApplyDecode(raw, cf.Transform)
+		if err != nil {
+			return "", err
+		}
+		if strings.TrimSpace(v) == "" {
+			return "", coreErrors.New(coreErrors.CodeInvalidInput, "missing combined body payload")
+		}
+		return v, nil
+	}
 	raw, ok, err := coreResolver.Resolve(cf.Ref(), input)
 	if err != nil || !ok {
 		if err != nil {
