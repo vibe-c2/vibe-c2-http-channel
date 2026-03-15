@@ -72,6 +72,21 @@ func detectHint(input coreResolver.Input, profiles []coreProfile.Profile) string
 	return ""
 }
 
+func resolveCombined(input coreResolver.Input, cf coreProfile.CombinedField) (string, error) {
+	raw, ok, err := coreResolver.Resolve(cf.Ref(), input)
+	if err != nil || !ok {
+		if err != nil {
+			return "", err
+		}
+		return "", coreErrors.New(coreErrors.CodeInvalidInput, "missing combined field: "+cf.Ref())
+	}
+	v, err := coreTransform.ApplyDecode(raw, cf.Transform)
+	if err != nil {
+		return "", err
+	}
+	return v, nil
+}
+
 func resolveMapped(input coreResolver.Input, mf coreProfile.MapField) (string, error) {
 	if strings.EqualFold(strings.TrimSpace(mf.Target.Location), "body") && strings.TrimSpace(mf.Target.Key) == "" {
 		raw, _ := input.Body[""].(string)
@@ -156,25 +171,49 @@ func NewWithProvider(addr, channelID, c2SyncBaseURL string, provider profilesPro
 
 		var lastErr error
 		for _, p := range candidates {
-			id, err := resolveMapped(input, p.Mapping.ID)
-			if err != nil {
-				lastErr = err
-				continue
-			}
-			encIn, err := resolveMapped(input, p.Mapping.EncryptedDataIn)
-			if err != nil {
-				lastErr = err
-				continue
+			pRun := p
+			var id, encIn string
+			if p.Mapping.CombinedIn != nil {
+				raw, err := resolveCombined(input, *p.Mapping.CombinedIn)
+				if err != nil {
+					lastErr = err
+					continue
+				}
+				sep := p.Mapping.CombinedIn.Separator
+				if sep == "" {
+					sep = "+"
+				}
+				parts := strings.SplitN(raw, sep, 2)
+				if len(parts) != 2 {
+					lastErr = coreErrors.New(coreErrors.CodeInvalidInput, "combined_in payload format mismatch")
+					continue
+				}
+				id, encIn = parts[0], parts[1]
+				pRun.Mapping.ID = coreProfile.MapField{Target: coreProfile.Target{Location: "mapping", Key: "id"}}
+				pRun.Mapping.EncryptedDataIn = coreProfile.MapField{Target: coreProfile.Target{Location: "mapping", Key: "encrypted_data_in"}}
+				pRun.Mapping.EncryptedDataOut = coreProfile.MapField{Target: coreProfile.Target{Location: "mapping", Key: "encrypted_data_out"}}
+			} else {
+				var err error
+				id, err = resolveMapped(input, p.Mapping.ID)
+				if err != nil {
+					lastErr = err
+					continue
+				}
+				encIn, err = resolveMapped(input, p.Mapping.EncryptedDataIn)
+				if err != nil {
+					lastErr = err
+					continue
+				}
 			}
 
 			env := &envelope{data: map[string]string{}}
-			env.SetField("mapping", p.Mapping.ID.Target.Key, id)
-			env.SetField("mapping", p.Mapping.EncryptedDataIn.Target.Key, encIn)
-			if hint != "" && p.Mapping.ProfileID != nil {
-				env.SetField("mapping", p.Mapping.ProfileID.Target.Key, hint)
+			env.SetField("mapping", pRun.Mapping.ID.Target.Key, id)
+			env.SetField("mapping", pRun.Mapping.EncryptedDataIn.Target.Key, encIn)
+			if hint != "" && pRun.Mapping.ProfileID != nil {
+				env.SetField("mapping", pRun.Mapping.ProfileID.Target.Key, hint)
 			}
 
-			outCanonical, err := runtime.HandleWithProfile(r.Context(), env, channelID, p)
+			outCanonical, err := runtime.HandleWithProfile(r.Context(), env, channelID, pRun)
 			if err != nil {
 				http.Error(w, "sync failed: "+err.Error(), http.StatusBadGateway)
 				return
@@ -191,6 +230,23 @@ func NewWithProvider(addr, channelID, c2SyncBaseURL string, provider profilesPro
 				return
 			}
 			affinity.Set(r.RemoteAddr, p.ProfileID)
+
+			if p.Mapping.CombinedOut != nil {
+				sep := p.Mapping.CombinedOut.Separator
+				if sep == "" {
+					sep = "+"
+				}
+				combined, err := coreTransform.ApplyEncode(outCanonical.ID+sep+outCanonical.EncryptedData, p.Mapping.CombinedOut.Transform)
+				if err != nil {
+					http.Error(w, "combined_out encode failed", http.StatusBadRequest)
+					return
+				}
+				if strings.EqualFold(strings.TrimSpace(p.Mapping.CombinedOut.Target.Location), "body") && strings.TrimSpace(p.Mapping.CombinedOut.Target.Key) == "" {
+					w.Header().Set("Content-Type", "text/plain")
+					_, _ = w.Write([]byte(combined))
+					return
+				}
+			}
 
 			if strings.EqualFold(strings.TrimSpace(p.Mapping.ID.Target.Location), "cookie") && strings.TrimSpace(p.Mapping.ID.Target.Key) != "" {
 				http.SetCookie(w, &http.Cookie{Name: p.Mapping.ID.Target.Key, Value: outID, Path: "/"})

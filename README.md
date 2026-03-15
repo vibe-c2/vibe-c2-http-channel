@@ -38,6 +38,7 @@ Startup behavior:
 - create `PROFILES_DIR` if it does not exist
 - ensure `default.yaml` exists in that folder
 - if missing, copy `examples/profiles/default.yaml` into `PROFILES_DIR/default.yaml`
+  - default profile expects raw body payload `base64(id+encrypted_data)`
 - watch `PROFILES_DIR` continuously:
   - new profile files are loaded instantly
   - updates to existing profile files are applied instantly

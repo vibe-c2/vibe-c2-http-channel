@@ -3,27 +3,17 @@ channel_type: http
 enabled: true
 priority: 100
 mapping:
-  profile_id:
-    source: profile_id
-    target:
-      location: cookie
-      key: p
-    transform:
-      - type: base64
-  id:
-    source: id
-    target:
-      location: cookie
-      key: i
-    transform:
-      - type: base64
-  encrypted_data_in:
-    source: encrypted_data
+  combined_in:
     target:
       location: body
       key: ""
-  encrypted_data_out:
-    source: encrypted_data
+    transform:
+      - type: base64
+    separator: "+"
+  combined_out:
     target:
       location: body
       key: ""
+    transform:
+      - type: base64
+    separator: "+"
