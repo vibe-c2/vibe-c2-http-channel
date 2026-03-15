@@ -19,14 +19,19 @@ First production channel module for Vibe C2.
 
 ## Configuration
 
-Main config file (`CONFIG_FILE`, default `configs/channel.example.yaml`):
+Runtime config is read from environment variables:
 
-- `channel_id`
-- `listen`
-- `c2_sync_base_url`
-- `profiles_file`
+- `CHANNEL_ID` (default: `http-main`)
+- `LISTEN_ADDR` (default: `:8080`)
+- `C2_SYNC_BASE_URL` (default: `http://localhost:9000`)
+- `PROFILES_FILE` (default: `configs/profiles.example.yaml`)
 
-Profiles are loaded from YAML file (default `configs/profiles.example.yaml`) and resolved via channel-core matcher (`hint` first, fallback last).
+`.env` fallback:
+
+- Pass path with `--config <path-to-env-file>`
+- `.env` is loaded as fallback only (existing environment variables win)
+
+Profiles are loaded from YAML file and resolved via channel-core matcher.
 
 Mapping refs support location prefixes:
 - `body:<field>`
@@ -39,7 +44,7 @@ Example: `id: query:agent_id`, `encrypted_data: header:X-Payload`.
 ## Run
 
 ```bash
-go run ./cmd/http-channel
+go run ./cmd/http-channel --config .env
 ```
 
 ## Integration Tests

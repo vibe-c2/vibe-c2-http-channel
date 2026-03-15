@@ -5,38 +5,46 @@ import (
 	"os"
 
 	coreProfile "github.com/vibe-c2/vibe-c2-golang-channel-core/pkg/profile"
-	"gopkg.in/yaml.v3"
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	ChannelID     string `yaml:"channel_id"`
-	Listen        string `yaml:"listen"`
-	C2SyncBaseURL string `yaml:"c2_sync_base_url"`
-	ProfilesFile  string `yaml:"profiles_file"`
+	ChannelID     string
+	Listen        string
+	C2SyncBaseURL string
+	ProfilesFile  string
 }
 
-func Load(path string) (Config, error) {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return Config{}, fmt.Errorf("read config: %w", err)
+func envOrDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
 	}
-	var c Config
-	if err := yaml.Unmarshal(b, &c); err != nil {
-		return Config{}, fmt.Errorf("parse config yaml: %w", err)
+	return fallback
+}
+
+// LoadFromEnv reads runtime configuration from environment variables.
+// If envFilePath exists, it is loaded as a fallback source (.env style).
+// Existing process environment values are not overridden by the .env file.
+func LoadFromEnv(envFilePath string) (Config, error) {
+	if envFilePath != "" {
+		_ = godotenv.Load(envFilePath)
 	}
-	if c.ChannelID == "" {
-		c.ChannelID = "http-main"
+
+	cfg := Config{
+		ChannelID:     envOrDefault("CHANNEL_ID", "http-main"),
+		Listen:        envOrDefault("LISTEN_ADDR", ":8080"),
+		C2SyncBaseURL: envOrDefault("C2_SYNC_BASE_URL", "http://localhost:9000"),
+		ProfilesFile:  envOrDefault("PROFILES_FILE", "configs/profiles.example.yaml"),
 	}
-	if c.Listen == "" {
-		c.Listen = ":8080"
+
+	if cfg.C2SyncBaseURL == "" {
+		return Config{}, fmt.Errorf("C2_SYNC_BASE_URL is required")
 	}
-	if c.C2SyncBaseURL == "" {
-		c.C2SyncBaseURL = "http://localhost:9000"
+	if cfg.ProfilesFile == "" {
+		return Config{}, fmt.Errorf("PROFILES_FILE is required")
 	}
-	if c.ProfilesFile == "" {
-		c.ProfilesFile = "configs/profiles.example.yaml"
-	}
-	return c, nil
+
+	return cfg, nil
 }
 
 func LoadProfiles(path string) ([]coreProfile.Profile, error) {

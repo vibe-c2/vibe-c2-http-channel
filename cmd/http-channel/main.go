@@ -1,23 +1,19 @@
 package main
 
 import (
+	"flag"
 	"log"
-	"os"
 
 	"github.com/vibe-c2/vibe-c2-http-channel/internal/config"
 	httpserver "github.com/vibe-c2/vibe-c2-http-channel/internal/transport/http/httpserver"
 )
 
-func getEnv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
-}
-
 func main() {
-	configFile := getEnv("CONFIG_FILE", "configs/channel.example.yaml")
-	cfg, err := config.Load(configFile)
+	var envFile string
+	flag.StringVar(&envFile, "config", ".env", "path to .env fallback file")
+	flag.Parse()
+
+	cfg, err := config.LoadFromEnv(envFile)
 	if err != nil {
 		log.Fatalf("config load failed: %v", err)
 	}
