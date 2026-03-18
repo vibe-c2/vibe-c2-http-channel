@@ -1,17 +1,14 @@
-profile_id: p2
-channel_type: http
+profile_id: 100
+profile_label: hint-routed-fallback
 enabled: true
-priority: 100
+action:
+  type: sync
 mapping:
   profile_id:
-    source: profile_id
     target: { location: body, key: profile_id }
   id:
-    source: id
     target: { location: body, key: id }
   encrypted_data_in:
-    source: encrypted_data
     target: { location: body, key: encrypted_data }
   encrypted_data_out:
-    source: encrypted_data
     target: { location: body, key: encrypted_data }

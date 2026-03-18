@@ -1,17 +1,14 @@
-profile_id: a
-channel_type: http
+profile_id: 300
+profile_label: ambiguous-a
 enabled: true
-priority: 200
+action:
+  type: sync
 mapping:
   profile_id:
-    source: profile_id
     target: { location: body, key: dup }
   id:
-    source: id
     target: { location: body, key: id }
   encrypted_data_in:
-    source: encrypted_data
     target: { location: body, key: encrypted_data }
   encrypted_data_out:
-    source: encrypted_data
     target: { location: body, key: encrypted_data }

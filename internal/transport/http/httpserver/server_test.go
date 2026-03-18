@@ -48,12 +48,21 @@ func TestObfuscationProfiles_Body(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("unexpected status: %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("unexpected status: %d body: %s", resp.StatusCode, body)
 	}
 
 	in := c2.LastInbound()
 	if in.ID != "n1" || in.EncryptedData != "blob" {
 		t.Fatalf("unexpected inbound to c2: %+v", in)
+	}
+
+	var out map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	if out["encrypted_data"] != "resp:blob" {
+		t.Fatalf("unexpected outbound encrypted_data: %s", out["encrypted_data"])
 	}
 }
 
@@ -68,7 +77,7 @@ func TestObfuscationProfiles_Header(t *testing.T) {
 
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/sync", bytes.NewReader([]byte(`{}`)))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-ID", "h-1")
+	req.Header.Set("X-Id", "h-1")
 	req.Header.Set("X-Payload", "hblob")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -76,7 +85,17 @@ func TestObfuscationProfiles_Header(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("unexpected status: %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("unexpected status: %d body: %s", resp.StatusCode, body)
+	}
+
+	in := c2.LastInbound()
+	if in.ID != "h-1" || in.EncryptedData != "hblob" {
+		t.Fatalf("unexpected inbound to c2: %+v", in)
+	}
+
+	if got := resp.Header.Get("X-Payload"); got != "resp:hblob" {
+		t.Fatalf("unexpected outbound X-Payload header: %s", got)
 	}
 }
 
@@ -97,7 +116,13 @@ func TestObfuscationProfiles_Query(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("unexpected status: %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("unexpected status: %d body: %s", resp.StatusCode, body)
+	}
+
+	in := c2.LastInbound()
+	if in.ID != "q1" || in.EncryptedData != "qblob" {
+		t.Fatalf("unexpected inbound to c2: %+v", in)
 	}
 }
 
@@ -120,7 +145,13 @@ func TestObfuscationProfiles_Cookie(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("unexpected status: %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("unexpected status: %d body: %s", resp.StatusCode, body)
+	}
+
+	in := c2.LastInbound()
+	if in.ID != "c1" || in.EncryptedData != "cblob" {
+		t.Fatalf("unexpected inbound to c2: %+v", in)
 	}
 }
 
@@ -142,7 +173,8 @@ func TestObfuscationProfiles_TransformBase64(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("unexpected status: %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("unexpected status: %d body: %s", resp.StatusCode, body)
 	}
 
 	in := c2.LastInbound()
@@ -150,14 +182,13 @@ func TestObfuscationProfiles_TransformBase64(t *testing.T) {
 		t.Fatalf("unexpected decoded inbound to c2: %+v", in)
 	}
 
-	var out SyncResponse
+	var out map[string]string
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatal(err)
 	}
-	expectedID := base64.StdEncoding.EncodeToString([]byte("agent-1-ack"))
 	expectedBlob := base64.StdEncoding.EncodeToString([]byte("resp:cipher"))
-	if out.ID != expectedID || out.EncryptedData != expectedBlob {
-		t.Fatalf("unexpected transformed outbound: %+v", out)
+	if out["encrypted_data"] != expectedBlob {
+		t.Fatalf("unexpected transformed outbound encrypted_data: %s (want %s)", out["encrypted_data"], expectedBlob)
 	}
 }
 
@@ -170,7 +201,7 @@ func TestObfuscationProfiles_HintRouted(t *testing.T) {
 	ts := httptest.NewServer(srv.Handler)
 	defer ts.Close()
 
-	payload := []byte(`{"profile_id":"p1","id_field":"abc","blob_field":"xyz"}`)
+	payload := []byte(`{"profile_id":"200","id_field":"abc","blob_field":"xyz"}`)
 	resp, err := http.Post(ts.URL+"/sync", "application/json", bytes.NewReader(payload))
 	if err != nil {
 		t.Fatal(err)
@@ -178,7 +209,8 @@ func TestObfuscationProfiles_HintRouted(t *testing.T) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("unexpected status: %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("unexpected status: %d body: %s", resp.StatusCode, body)
 	}
 	in := c2.LastInbound()
 	if in.ID != "abc" || in.EncryptedData != "xyz" {
@@ -186,7 +218,7 @@ func TestObfuscationProfiles_HintRouted(t *testing.T) {
 	}
 }
 
-func TestDefaultProfile_CombinedBase64Body(t *testing.T) {
+func TestDefaultProfile_CompositeBase64Body(t *testing.T) {
 	c2 := newTestC2Core(t)
 	defer c2.Close()
 
@@ -203,7 +235,8 @@ func TestDefaultProfile_CombinedBase64Body(t *testing.T) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("unexpected status: %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("unexpected status: %d body: %s", resp.StatusCode, body)
 	}
 
 	in := c2.LastInbound()
@@ -219,7 +252,7 @@ func TestDefaultProfile_CombinedBase64Body(t *testing.T) {
 	if err != nil {
 		t.Fatalf("response not base64: %v", err)
 	}
-	if string(decoded) != "agent-7-ack+resp:ciphertext" {
+	if string(decoded) != "resp:ciphertext" {
 		t.Fatalf("unexpected decoded outbound body: %s", string(decoded))
 	}
 }

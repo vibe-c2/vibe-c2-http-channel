@@ -1,19 +1,19 @@
-profile_id: default
-channel_type: http
+profile_id: 1
+profile_label: default
 enabled: true
-priority: 100
+action:
+  type: sync
 mapping:
-  combined_in:
+  composite_in:
     target:
       location: body
-      key: ""
     transform:
       - type: base64
-    separator: "+"
-  combined_out:
+    separator:
+      type: delimiter
+      value: "+"
+  encrypted_data_out:
     target:
       location: body
-      key: ""
     transform:
       - type: base64
-    separator: "+"

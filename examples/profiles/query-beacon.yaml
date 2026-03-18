@@ -1,14 +1,12 @@
-profile_id: query-beacon-v1
-channel_type: http
+profile_id: 30
+profile_label: query-beacon-v1
 enabled: true
-priority: 100
+action:
+  type: sync
 mapping:
   id:
-    source: id
     target: { location: query, key: i }
   encrypted_data_in:
-    source: encrypted_data
     target: { location: query, key: d }
   encrypted_data_out:
-    source: encrypted_data
-    target: { location: query, key: d }
+    target: { location: body, key: encrypted_data }

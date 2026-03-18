@@ -1,17 +1,14 @@
-profile_id: p1
-channel_type: http
+profile_id: 200
+profile_label: hint-routed-p1
 enabled: true
-priority: 200
+action:
+  type: sync
 mapping:
   profile_id:
-    source: profile_id
     target: { location: body, key: profile_id }
   id:
-    source: id
     target: { location: body, key: id_field }
   encrypted_data_in:
-    source: encrypted_data
     target: { location: body, key: blob_field }
   encrypted_data_out:
-    source: encrypted_data
     target: { location: body, key: blob_field }
