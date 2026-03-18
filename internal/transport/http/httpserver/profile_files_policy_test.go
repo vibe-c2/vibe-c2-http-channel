@@ -8,7 +8,7 @@ import (
 )
 
 func TestPolicy_OneProfilePerYAML(t *testing.T) {
-	dir := filepath.Join("..", "..", "..", "..", "examples", "profiles")
+	dir := filepath.Join(moduleRoot(t), "examples", "profiles")
 	files, err := filepath.Glob(filepath.Join(dir, "*.yaml"))
 	if err != nil {
 		t.Fatalf("glob yaml files: %v", err)

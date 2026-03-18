@@ -7,6 +7,9 @@ import (
 	"os/signal"
 	"syscall"
 
+	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/vibe-c2/vibe-c2-golang-channel-core/pkg/amqprpc"
+	"github.com/vibe-c2/vibe-c2-golang-channel-core/pkg/mgmtrpc"
 	"github.com/vibe-c2/vibe-c2-http-channel/internal/config"
 	httpserver "github.com/vibe-c2/vibe-c2-http-channel/internal/transport/http/httpserver"
 )
@@ -32,8 +35,21 @@ func main() {
 	defer stop()
 
 	state := config.NewProfilesState(profiles)
-	if err := config.StartProfilesWatcher(ctx, cfg.ProfilesDir, state, log.Default()); err != nil {
-		log.Fatalf("profiles watcher start failed: %v", err)
+
+	if cfg.AMQPURL != "" {
+		conn, err := amqp.Dial(cfg.AMQPURL)
+		if err != nil {
+			log.Fatalf("amqp connect failed: %v", err)
+		}
+		defer conn.Close()
+
+		rpcServer := mgmtrpc.NewServer(state)
+		go func() {
+			log.Printf("amqp rpc consumer started (queue=%s)", amqprpc.QueueName(cfg.ChannelID))
+			if err := amqprpc.StartRPCConsumer(ctx, conn, cfg.ChannelID, rpcServer); err != nil && ctx.Err() == nil {
+				log.Fatalf("amqp rpc consumer failed: %v", err)
+			}
+		}()
 	}
 
 	srv := httpserver.NewWithProvider(cfg.Listen, cfg.ChannelID, cfg.C2SyncBaseURL, state)

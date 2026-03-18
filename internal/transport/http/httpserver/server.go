@@ -28,6 +28,12 @@ type envelope struct {
 func (e *envelope) SourceKey() string { return "http" }
 func (e *envelope) GetField(location, key string) (string, bool) {
 	v, ok := e.data[location+"."+key]
+	if ok {
+		return v, true
+	}
+	// Fallback: case-insensitive lookup (handles Go's canonical header casing
+	// vs profile-defined header keys like "X-Request-ID" → "X-Request-Id").
+	v, ok = e.data[location+"."+strings.ToLower(key)]
 	return v, ok
 }
 func (e *envelope) SetField(location, key, value string) {
@@ -126,7 +132,7 @@ func writeHTTPResponse(w http.ResponseWriter, env *envelope, p coreProfile.Profi
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{
-		"encrypted_data": encOut,
+		outKey: encOut,
 	})
 }
 

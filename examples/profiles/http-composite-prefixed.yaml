@@ -1,19 +1,23 @@
-profile_id: 1
-profile_label: default
+profile_id: 105
+profile_label: http-composite-prefixed
 enabled: true
 action:
   type: sync
 mapping:
   composite_in:
+    separator:
+      type: length_prefix
+      id_length: 16
     target:
       location: body
     transform:
+      - type: prefix
+        value: "msg:"
       - type: base64
-    separator:
-      type: length_prefix
-      id_length: 36
   encrypted_data_out:
     target:
       location: body
     transform:
+      - type: prefix
+        value: "msg:"
       - type: base64

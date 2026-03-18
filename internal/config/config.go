@@ -14,6 +14,7 @@ type Config struct {
 	Listen        string
 	C2SyncBaseURL string
 	ProfilesDir   string
+	AMQPURL       string
 }
 
 func envOrDefault(key, fallback string) string {
@@ -36,6 +37,7 @@ func LoadFromEnv(envFilePath string) (Config, error) {
 		Listen:        envOrDefault("LISTEN_ADDR", ":8080"),
 		C2SyncBaseURL: envOrDefault("C2_SYNC_BASE_URL", "http://localhost:9000"),
 		ProfilesDir:   envOrDefault("PROFILES_DIR", "profiles"),
+		AMQPURL:       envOrDefault("AMQP_URL", ""),
 	}
 
 	if cfg.C2SyncBaseURL == "" {
